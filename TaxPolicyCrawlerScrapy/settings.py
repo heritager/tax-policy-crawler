@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 
-# Scrapy settings for TaxPolicyCrawlerScrapy project
+# Scrapy settings for 税收政策 project
 #
 # For simplicity, this file contains only settings considered important or
 # commonly used. You can find more settings consulting the documentation:
@@ -10,7 +10,7 @@ import os
 #     http://scrapy.readthedocs.org/en/latest/topics/downloader-middleware.html
 #     http://scrapy.readthedocs.org/en/latest/topics/spider-middleware.html
 
-BOT_NAME = 'TaxPolicyCrawlerScrapy'
+BOT_NAME = '税收政策'
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 
 SPIDER_MODULES = ['TaxPolicyCrawlerScrapy.spiders']
