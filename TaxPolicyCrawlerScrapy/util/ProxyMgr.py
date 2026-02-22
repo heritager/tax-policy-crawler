@@ -8,7 +8,7 @@ import TaxPolicyCrawlerScrapy.settings as setting
 from TaxPolicyCrawlerScrapy import settings
 
 # 简单的 ip:port 的正则表达式
-ip_reg_str = "^([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,6}$"
+ip_reg_str = r"^([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,6}$"
 proxy_base_url = "http://" + settings.PROXY_HOST + ":" + settings.PROXY_PORT
 
 
@@ -16,7 +16,12 @@ def get_proxy():
     if not setting.USE_PROXY:
         return None
 
-    ip_address = requests.get(proxy_base_url + "/get/").text
+    try:
+        ip_address = requests.get(proxy_base_url + "/get/", timeout=10).text
+    except Exception as ex:
+        print("proxy service unavailable: {}".format(ex))
+        return None
+
     if not ip_address:
         return {}
 
@@ -33,7 +38,10 @@ def get_proxy():
 def delete_proxy(proxy):
     host = proxy.replace('http://', '').replace('https://', '')
     print("delete proxy:" + host)
-    requests.get(proxy_base_url + "/delete/?proxy={}".format(host))
+    try:
+        requests.get(proxy_base_url + "/delete/?proxy={}".format(host), timeout=10)
+    except Exception as ex:
+        print("delete proxy failed: {}".format(ex))
 
 
 # print(get_proxy())

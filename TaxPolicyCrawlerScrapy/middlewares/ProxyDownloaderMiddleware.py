@@ -7,13 +7,13 @@ import TaxPolicyCrawlerScrapy.util.ProxyMgr as ProxyMgr
 
 class ProxyDownloaderMiddleware(object):
     # 这个中间件，只需要确定proxy位置，放到meta['proxy']里，然后通过配置，由scrapy自带的downloadermiddleware.httpproxy来生效
-    def process_request(self, request, spider):
+    def process_request(self, request, spider=None):
         proxy = ProxyMgr.get_proxy()
-        if proxy is None:
-            print("**************ProxyMiddleware no poxy************")
-        elif proxy.get('user_pass') is not None:
+        if not proxy:
+            return
+        if proxy.get('user_pass') is not None:
             request.meta['proxy'] = proxy['http']
-            encoded_user_pass = base64.encodestring(proxy['user_pass'])
+            encoded_user_pass = base64.b64encode(proxy['user_pass'].encode('utf-8')).decode('utf-8')
             request.headers['Proxy-Authorization'] = 'Basic ' + encoded_user_pass
             print("**************ProxyMiddleware use proxy with pass************" + proxy['http'])
         else:

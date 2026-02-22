@@ -1,281 +1,136 @@
 # coding=utf-8
-import threading
+import json
+import math
+from urllib.parse import urlencode
+
 import scrapy
-from bs4 import BeautifulSoup
-from pydispatch import dispatcher
-from scrapy import signals
 
 from TaxPolicyCrawlerScrapy import settings
 from TaxPolicyCrawlerScrapy.items import PolicyItem, PolicySource
 from TaxPolicyCrawlerScrapy.util import CacheUtil, Constants
-from selenium.webdriver.remote.webdriver import WebDriver as RemoteWebDriver
-from selenium.webdriver.chrome.options import Options
-
-# 国税总局，税收法规库的抓取
-# http://hd.chinatax.gov.cn/guoshui/main.jsp
-# 2017.9.8 共3531项查询结果236页
-base_url = 'http://hd.chinatax.gov.cn/guoshui'
 
 
 class TaxPolicyCrawler(scrapy.Spider):
     # 框架使用的属性，用于分类存储
     policy_source = PolicySource()
     doc_type = Constants.DocTypeChinaTax.doc_type
-    policy_source['source'] = Constants.DocTypeChinaTax.source_name    # '国税总局'
-    policy_source['policyType'] = Constants.DocTypeChinaTax.policy_types['policy_law']  # '税收法规库'
+    policy_source['source'] = Constants.DocTypeChinaTax.source_name
+    policy_source['policyType'] = Constants.DocTypeChinaTax.policy_types['policy_law']
 
     # spider的名称，与setting配置里的一致；必须要有name属性，否则scrapy不做识别
     name = "TaxPolicyCrawler"
 
-    # 当前爬虫，request使用的headers
-    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+    api_url = 'https://www.chinatax.gov.cn/search5/search/s'
+    headers = {
+        'User-Agent': (
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+            '(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+        ),
+        'Referer': 'https://fgk.chinatax.gov.cn/',
+    }
 
-    # TODO 以下代码，用于启用browser来下载页面
-    # def __init__(self, **kwargs):
-    #     chrome_options = Options()
-    #     chrome_options.add_argument("--headless")
-    #
-    #     # 对应的chromedriver的放置目录
-    #     # driver = webdriver.Chrome(executable_path=('/Applications/Google\ Chrome.app/Contents/MacOS/chromedriver'),
-    #                                   chrome_options=chrome_options)
-    #     # 可以采用remote方式，连接单独启动的chromedriver
-    #     self.browser = RemoteWebDriver(settings.REMOTE_HEADLESS_CHROME, options=chrome_options)
-    #
-    #     super().__init__(**kwargs)
-    #     dispatcher.connect(self.spider_closed, signals.spider_closed)  # dispatcher.connect()信号分发器，第一个参数信号触发函数，第二个参数是触发信号，signals.spider_closed是爬虫结束信号
-    #
-    # def spider_closed(self, spider):  # 信号触发函数
-    #     print('爬虫结束 停止爬虫')
-    #     self.browser.quit()
+    @classmethod
+    def from_crawler(cls, crawler, *args, **kwargs):
+        spider = super().from_crawler(crawler, *args, **kwargs)
+        spider.page_size = crawler.settings.getint('CHINATAX_PAGE_SIZE', settings.CHINATAX_PAGE_SIZE)
+        spider.max_pages = crawler.settings.getint('CHINATAX_MAX_PAGES', settings.CHINATAX_MAX_PAGES)
+        spider.policy_labels = crawler.settings.get(
+            'CHINATAX_POLICY_LABELS',
+            settings.CHINATAX_POLICY_LABELS,
+        )
+        return spider
 
-    # # TODO 以下设置，配置该spider不使用代理；（企图这么实现，现在代码还不行）
-    # custom_settings = {
-    #     'USE_PROXY': False
-    # }
-
-    # 蜘蛛打开的时执行
-    def open_spider(self, spider):
-        pass
-
-    # 蜘蛛关闭时执行
-    def close_spider(self, spider):
-        pass
-
-    # 可访问核心组件比如配置和信号，并注册钩子函数到Scrapy中
-    # def from_crawler(cls, crawler, **kwargs):
-    # # 需要返回一个Crawler
-    #     pass
+    async def start(self):
+        for request in self.start_requests():
+            yield request
 
     def start_requests(self):
-        yield scrapy.Request(base_url + '/main.jsp', method='GET', headers=self.headers, callback=self.parse_main)
+        yield self._build_page_request(0)
 
-    # 刷新了主页后的解析：获取了cookies，下一步抓取分页总数summary
-    def parse_main(self, response):
-        if not response:
+    def _build_query(self, page_num):
+        return {
+            'siteCode': 'bm29000002',
+            'searchWord': '',
+            'type': 0,
+            'pageNum': page_num,
+            'pageSize': self.page_size,
+            'cwrqStart': '',
+            'cwrqEnd': '',
+            'column': '政策法规',
+            'label': self.policy_labels,
+            'likeDoc': 0,
+            'wordPlace': 0,
+            'orderBy': 5,
+            'indexCode': 1,
+            'searchSiteName': 'GSFFK',
+        }
+
+    def _build_page_request(self, page_num):
+        query = urlencode(self._build_query(page_num))
+        url = '{}?{}'.format(self.api_url, query)
+        return scrapy.Request(
+            url=url,
+            method='GET',
+            headers=self.headers,
+            callback=self.parse_search_page,
+            meta={'page_num': page_num},
+            dont_filter=True,
+        )
+
+    def parse_search_page(self, response):
+        try:
+            payload = json.loads(response.text)
+        except Exception:
+            self.logger.warning('JSON parse failed at %s', response.url)
             return
 
-        print('获取分页信息：')
-        form_data = 'articleField01=' \
-                    '&articleField03=' \
-                    '&articleField04=' \
-                    '&articleField05=' \
-                    '&articleField06=' \
-                    '&articleField07_d=' \
-                    '&articleField07_s=' \
-                    '&articleField08=' \
-                    '&articleField09=' \
-                    '&articleField10=' \
-                    '&articleField11=' \
-                    '&articleField12=' \
-                    '&articleField13=' \
-                    '&articleField14=' \
-                    '&articleField18=%E5%90%A6' \
-                    '&articleRole=0000000' \
-                    '&channelId=' \
-                    '&intvalue=-1' \
-                    '&intvalue1=4' \
-                    '&rtoken=fgk' \
-                    '&shuizhong=%E6%80%BB%E5%B1%80%E6%B3%95%E8%A7%84'
+        result_all = payload.get('searchResultAll') or {}
+        records = result_all.get('searchTotal') or []
+        page_num = int(response.meta.get('page_num', 0))
 
-        yield scrapy.Request(base_url + '/action/InitNewArticle.do',
-                             method='POST',
-                             body=form_data,
-                             headers=self.headers,
-                             meta={'use_browser': False},
-                             callback=self.parse_summary)
-
-    # 刷新列表首页后的解析：获取分页数，然后根据分页抓取
-    def parse_summary(self, response):
-        page_count = parse_item_summary(response.body)
-        print('page_count:' + str(page_count))
-
-        if not page_count or page_count <= 0:
-            print('获取税收法规库信息失败，可能被禁止权限了。。。')
-            return
-
-        for index in range(page_count):
-            form_data = 'articleField01=' \
-                        '&articleField03=' \
-                        '&articleField04=' \
-                        '&articleField05=' \
-                        '&articleField06=' \
-                        '&articleField07_d=' \
-                        '&articleField07_s=' \
-                        '&articleField08=' \
-                        '&articleField09=' \
-                        '&articleField10=' \
-                        '&articleField11=' \
-                        '&articleField12=' \
-                        '&articleField13=' \
-                        '&articleField14=' \
-                        '&articleField18=%E5%90%A6' \
-                        '&articleRole=0000000' \
-                        '&intvalue=-1' \
-                        '&intvalue1=4' \
-                        '&intFlag=0' \
-                        '&cPage=' + str(index + 1) + '' \
-                        '&rtoken=fgk' \
-                        '&shuizhong=%E6%80%BB%E5%B1%80%E6%B3%95%E8%A7%84'
-            yield scrapy.Request(base_url + '/action/InitNewArticle.do',
-                                 method='POST',
-                                 headers=self.headers,
-                                 body=form_data,
-                                 callback=self.parse_list)
-
-    # 刷新分页的列表后的解析：获取每项政策详情链接，然后抓取详情
-    def parse_list(self, response):
-        item_list = parse_item_list(response.body)
-
-        if not item_list:
-            return
-
-        for item in item_list:
-            url = item.get('url')
-            print(threading.current_thread().name + '，' + self.policy_source['source'] + '，' +
-                  self.policy_source['policyType'] + ',放入抓取网页队列：' + url)
-            if url is None:
+        for data in records:
+            item = self._build_policy_item(data)
+            if not item:
                 continue
-
-            if CacheUtil.is_url_crawled(url):
-                print('url：' + url + ' 已经抓取过，不重复抓取')
+            if CacheUtil.is_url_crawled(item.get('url')):
                 continue
+            yield item
 
-            full_url = url      # base_url + url[2:]
-            yield scrapy.Request(full_url,
-                                 method='GET',
-                                 headers=self.headers,
-                                 meta={'policy_item': item},
-                                 priority=-1)        # priority默认0，即深度优先；如果改成1（降低优先级），则变为广度优先（抓取详情的request的优先级，高于抓取列表的，试图尽量一页一页的抓取）
+        if page_num == 0:
+            total = int(result_all.get('total') or 0)
+            if total <= 0:
+                return
 
-    # 默认解析器，在Request没有填写callback时调用：解析最后的详情，并发送到items及pipelines
-    def parse(self, response):
-        yield get_policy_detail(response.body, response.meta['policy_item'])
+            page_size = max(1, int(self.page_size))
+            page_count = int(math.ceil(float(total) / float(page_size)))
+            if self.max_pages > 0:
+                page_count = min(page_count, self.max_pages)
 
+            for index in range(1, page_count):
+                yield self._build_page_request(index)
 
-# 解析分页总数
-def parse_item_summary(page_text):
-    soup = BeautifulSoup(page_text, "lxml")
-    all_table_tags = soup.find_all('table')
+    def _build_policy_item(self, data):
+        url = data.get('url')
+        if not url:
+            return None
 
-    if not all_table_tags:
-        return
+        content = data.get('content') or data.get('shortContent') or ''
+        if not content:
+            return None
 
-    for tableTag in all_table_tags:
-        tr_tags = tableTag.find_all('tr')
+        gov_doc = data.get('govDoc') or {}
+        subtitle = gov_doc.get('docNum') or data.get('label') or ''
+        publisher = data.get('pubName') or data.get('source') or ''
 
-        if not tr_tags:
-            continue
-
-        page_size = get_page_size(tr_tags[0])  # 从第一个tr里分析页数
-        if page_size >= 0:
-            return page_size
-    return 0
-
-
-# 获取政策列表（分页）
-def get_page_size(tr_tag):
-    td_str = get_text_in_tr(tr_tag, 0)  # 获取第一个节点的字符串
-    start = td_str.find('页 1/')
-
-    if start < 0:
-        return start
-
-    start += len('页 1/')
-    end = td_str.find(' ', start)
-
-    return int(td_str[start: end])
-
-
-# 解析每页里的详情标题、链接
-def parse_item_list(page_text):
-    soup = BeautifulSoup(page_text, "lxml")
-    target_table = soup.find('table', {'cellspacing': "1"})
-
-    if not target_table:
-        return []
-
-    tr_tags = target_table.find_all('tr')
-
-    if not tr_tags:
-        return []
-
-    policy_list = []
-    for tr in tr_tags:
-        all_tds = tr.find_all('td')
-        if len(all_tds) <= 0:
-            continue
-
-        a_tag = all_tds[0].find('a')
-        if not a_tag:
-            continue
-
-        policy_list.append(PolicyItem(title=a_tag.text,
-                                      url=base_url + a_tag.attrs['href'][2:],
-                                      subtitle=all_tds[2].text,
-                                      date=all_tds[1].text))
-
-    return policy_list
-
-
-# 根据链接爬取详情
-def get_policy_detail(page_text, item):
-    if not item or not item.get('url'):
-        return
-
-    # 获取详情页
-    soup = BeautifulSoup(page_text, "lxml")
-    all_table_tags = soup.find_all('tbody')
-    if not all_table_tags or len(all_table_tags) < 3:
-        return
-
-    # 找到td
-    target_td = all_table_tags[2].find('td')
-
-    # 所有内容的<p>节
-    item['content'] = target_td.text
-    # content_p_list = target_td.find_all('p')
-    # item['content'] = ''
-    # for p in content_p_list:
-    #     item['content'] += '\n<br>\n'
-    #     item['content'] += p.text
-
-    # 签名的<p>节
-    publisher_p_list = target_td.find_all('p', style=True)
-    item['publisher'] = ''
-    for p in publisher_p_list:
-        item['publisher'] += '\n<br>\n'
-        item['publisher'] += p.text
-
-    return item
-
-
-# 从table的tr节里，获取文案
-def get_text_in_tr(tr_tag, index):
-    all_tds = tr_tag.find_all('td')
-    if len(all_tds) <= index:
-        return ''
-
-    td_str = all_tds[index]
-
-    return td_str.text
-
+        return PolicyItem(
+            title=(data.get('title') or '').strip(),
+            subtitle=subtitle.strip(),
+            date=(data.get('cwrq') or '').split(' ')[0],
+            content=content.strip(),
+            publisher=publisher.strip(),
+            url=url.strip(),
+            doc_type=self.doc_type,
+            source=self.policy_source.get('source'),
+            policyType=self.policy_source.get('policyType'),
+            taxLevel=self.policy_source.get('taxLevel'),
+        )

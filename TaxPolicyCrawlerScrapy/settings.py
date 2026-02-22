@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 
 # Scrapy settings for TaxPolicyCrawlerScrapy project
 #
@@ -10,9 +11,17 @@
 #     http://scrapy.readthedocs.org/en/latest/topics/spider-middleware.html
 
 BOT_NAME = 'TaxPolicyCrawlerScrapy'
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 
 SPIDER_MODULES = ['TaxPolicyCrawlerScrapy.spiders']
 NEWSPIDER_MODULE = 'TaxPolicyCrawlerScrapy.spiders'
+
+
+def _env_bool(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ('1', 'true', 'yes', 'on')
 
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
@@ -56,7 +65,7 @@ USER_AGENTS = [
 ]
 
 # Obey robots.txt rules
-ROBOTSTXT_OBEY = True
+ROBOTSTXT_OBEY = _env_bool('ROBOTSTXT_OBEY', False)
 
 # Configure maximum concurrent requests performed by Scrapy (default: 16)
 #CONCURRENT_REQUESTS = 32
@@ -64,12 +73,12 @@ ROBOTSTXT_OBEY = True
 # Configure a delay for requests for the same website (default: 0)
 # See http://scrapy.readthedocs.org/en/latest/topics/settings.html#download-delay
 # See also autothrottle settings and docs
-DOWNLOAD_DELAY = 5
+DOWNLOAD_DELAY = float(os.getenv('DOWNLOAD_DELAY', '1'))
 # shenxy--是否使用代理服务器
-USE_PROXY = True
+USE_PROXY = _env_bool('USE_PROXY', False)
 # The download delay setting will honor only one of:
-#CONCURRENT_REQUESTS_PER_DOMAIN = 16
-CONCURRENT_REQUESTS_PER_IP = 16
+#CONCURRENT_REQUESTS_PER_IP = 16
+CONCURRENT_REQUESTS_PER_DOMAIN = int(os.getenv('CONCURRENT_REQUESTS_PER_DOMAIN', '8'))
 
 # Disable cookies (enabled by default)
 COOKIES_ENABLED = True
@@ -94,12 +103,9 @@ COOKIES_ENABLED = True
 # 优先级从小到大，依次调用process_response()。设置为None，则作废该中间件
 DOWNLOADER_MIDDLEWARES = {
     'TaxPolicyCrawlerScrapy.middlewares.RandomUserAgentMiddleware.RandomUserAgentMiddleware': 100,
-    'TaxPolicyCrawlerScrapy.middlewares.ProxyDownloaderMiddleware.ProxyDownloaderMiddleware': 200,
-    'TaxPolicyCrawlerScrapy.middlewares.BrowserDownloaderMiddleware.BrowserDownloaderMiddleware': 205,
-    'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware': 210,
     # "scrapy.contrib.downloadermiddleware.redirect.RedirectMiddleware": None,
     # 作废系统预置的重试，改为使用自定义的
-    'scrapy.contrib.downloadermiddleware.retry.RetryMiddleware': None,
+    'scrapy.downloadermiddlewares.retry.RetryMiddleware': None,
     "TaxPolicyCrawlerScrapy.middlewares.MyRetryMiddleware.MyRetryMiddleware": 302,
 }
 
@@ -111,11 +117,14 @@ DOWNLOADER_MIDDLEWARES = {
 
 # Configure item pipelines
 # See http://scrapy.readthedocs.org/en/latest/topics/item-pipeline.html
-ITEM_PIPELINES = {
-    # 'TaxPolicyCrawlerScrapy.pipelines.TaxpolicycrawlerscrapyPipeline': 300,
-    'TaxPolicyCrawlerScrapy.pipelines.ElasticSearchPipeline.ElasticSearchPipeline': 400,
-    'TaxPolicyCrawlerScrapy.pipelines.ExcelPipeline.ExcelPipeline': 450,
-}
+USE_ELASTICSEARCH = _env_bool('USE_ELASTICSEARCH', False)
+EXPORT_EXCEL = _env_bool('EXPORT_EXCEL', True)
+
+ITEM_PIPELINES = {}
+if USE_ELASTICSEARCH:
+    ITEM_PIPELINES['TaxPolicyCrawlerScrapy.pipelines.ElasticSearchPipeline.ElasticSearchPipeline'] = 400
+if EXPORT_EXCEL:
+    ITEM_PIPELINES['TaxPolicyCrawlerScrapy.pipelines.ExcelPipeline.ExcelPipeline'] = 450
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See http://doc.scrapy.org/en/latest/topics/autothrottle.html
@@ -139,15 +148,32 @@ ITEM_PIPELINES = {
 # HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
 
 # ElasticSearch的服务地址
-ES_HOST = '172.16.20.43'
-ES_PORT = '9200'
+ES_SCHEME = os.getenv('ES_SCHEME', 'http')
+ES_HOST = os.getenv('ES_HOST', '127.0.0.1')
+ES_PORT = int(os.getenv('ES_PORT', '9200'))
+ES_URL = os.getenv('ES_URL', '')
 
 # 代理池服务的地址
-PROXY_HOST = '172.16.20.43'
-PROXY_PORT = '5000'
+PROXY_HOST = os.getenv('PROXY_HOST', '127.0.0.1')
+PROXY_PORT = os.getenv('PROXY_PORT', '5000')
 
 # headless chrome的remote地址
-REMOTE_HEADLESS_CHROME = 'http://127.0.0.1:9515'
+REMOTE_HEADLESS_CHROME = os.getenv('REMOTE_HEADLESS_CHROME', '')
+
+# Chinatax Search5 API crawl controls
+CHINATAX_PAGE_SIZE = int(os.getenv('CHINATAX_PAGE_SIZE', '20'))
+CHINATAX_MAX_PAGES = int(os.getenv('CHINATAX_MAX_PAGES', '0'))  # 0 means no limit
+CHINATAX_POLICY_LABELS = os.getenv(
+    'CHINATAX_POLICY_LABELS',
+    '法律,行政法规,国务院文件,税务部门规章,税务规范性文件,财税文件,其他文件,工作通知',
+)
+
+if USE_PROXY:
+    DOWNLOADER_MIDDLEWARES['TaxPolicyCrawlerScrapy.middlewares.ProxyDownloaderMiddleware.ProxyDownloaderMiddleware'] = 200
+    DOWNLOADER_MIDDLEWARES['scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware'] = 210
+
+if REMOTE_HEADLESS_CHROME:
+    DOWNLOADER_MIDDLEWARES['TaxPolicyCrawlerScrapy.middlewares.BrowserDownloaderMiddleware.BrowserDownloaderMiddleware'] = 205
 
 # 重试设置
 RETRY_ENABLED = True

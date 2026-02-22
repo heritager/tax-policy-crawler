@@ -22,6 +22,10 @@ class PolicyItem(scrapy.Item):
     publisher = scrapy.Field()  # 发文部门
     url = scrapy.Field()  # 链接地址
     md5 = scrapy.Field()  # md5判断是否重复
+    doc_type = scrapy.Field()  # 业务文档类型
+    source = scrapy.Field()  # 政策来源
+    policyType = scrapy.Field()  # 政策类型
+    taxLevel = scrapy.Field()  # 税种
 
 
 class PolicySource(scrapy.Item):

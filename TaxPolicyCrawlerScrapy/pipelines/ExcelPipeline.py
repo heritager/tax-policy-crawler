@@ -13,8 +13,12 @@ from TaxPolicyCrawlerScrapy.util import ExcelUtil
 
 
 class ExcelPipeline(object):
-    def process_item(self, item, spider):
-            doc_type, body_dict = PipelineConvert.convert_item(item, spider)
+    def process_item(self, item, spider=None):
+            converted = PipelineConvert.convert_item(item, spider)
+            if not converted:
+                return item
+
+            doc_type, body_dict = converted
             ExcelUtil.save_to_excel(Constants.es_index_name, doc_type=doc_type, item_list=[body_dict])
 
             return item

@@ -8,7 +8,7 @@ from scrapy.http import HtmlResponse
 # 需要同时支持使用&不使用 headless chrome的情况（settings里的downloadermiddleware.httpproxy中间件不能去掉）
 class BrowserDownloaderMiddleware(object):
 
-    def process_request(self, request, spider):
+    def process_request(self, request, spider=None):
         # 根据是否定义browser对象，来判断是否使用browser来做数据爬取
         if hasattr(spider, 'browser') and spider.browser \
                 and ('use_browser' not in request.meta.keys() or request.meta['use_browser'] is True):

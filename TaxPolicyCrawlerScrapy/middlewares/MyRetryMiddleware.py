@@ -15,7 +15,7 @@ class MyRetryMiddleware(RetryMiddleware):
             # delete proxy from proxies pool
             ProxyMgr.delete_proxy(proxy)
 
-    def process_response(self, request, response, spider):
+    def process_response(self, request, response, spider=None):
         if request.meta.get('dont_retry', False):
             return response
         if response.status in self.retry_http_codes:
@@ -27,7 +27,7 @@ class MyRetryMiddleware(RetryMiddleware):
             return self._retry(request, reason, spider) or response
         return response
 
-    def process_exception(self, request, exception, spider):
+    def process_exception(self, request, exception, spider=None):
         if isinstance(exception, self.EXCEPTIONS_TO_RETRY) \
                 and not request.meta.get('dont_retry', False):
             # 删除该代理

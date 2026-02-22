@@ -13,6 +13,8 @@ class RandomUserAgentMiddleware(object):
     def from_crawler(cls, crawler):
         return cls(crawler.settings.getlist('USER_AGENTS'))
 
-    def process_request(self, request, spider):
+    def process_request(self, request, spider=None):
         # print "**************************" + random.choice(self.agents)
+        if not self.agents:
+            return
         request.headers.setdefault('User-Agent', random.choice(self.agents))

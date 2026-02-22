@@ -11,6 +11,15 @@ from xlutils.copy import copy
 lock = threading.Lock()     # 线程同步锁，控制Excel写操作
 
 
+def _safe_cell(value, max_len=32767):
+    if value is None:
+        return ''
+    text = str(value)
+    if len(text) <= max_len:
+        return text
+    return text[:max_len]
+
+
 # 结果输出到Excel
 def save_to_excel(index_name, doc_type, item_list, is_reset=False):
     with lock:
@@ -57,17 +66,17 @@ def save_to_excel(index_name, doc_type, item_list, is_reset=False):
         start_index = len(excel_sheet.rows)
 
         for i in range(len(item_list)):
-            row_item = item_list[i - 1]
+            row_item = item_list[i]
             excel_sheet.write(start_index + i, 0, start_index + i)
-            excel_sheet.write(start_index + i, 1, row_item.get('source'))
-            excel_sheet.write(start_index + i, 2, row_item.get('policyType'))
-            excel_sheet.write(start_index + i, 3, row_item.get('taxLevel'))
+            excel_sheet.write(start_index + i, 1, _safe_cell(row_item.get('source')))
+            excel_sheet.write(start_index + i, 2, _safe_cell(row_item.get('policyType')))
+            excel_sheet.write(start_index + i, 3, _safe_cell(row_item.get('taxLevel')))
 
-            excel_sheet.write(start_index + i, 4, row_item.get('title'))
-            excel_sheet.write(start_index + i, 5, row_item.get('subtitle'))
-            excel_sheet.write(start_index + i, 6, row_item.get('url'))
-            excel_sheet.write(start_index + i, 7, row_item.get('date'))
-            excel_sheet.write(start_index + i, 8, row_item.get('content'))
-            excel_sheet.write(start_index + i, 9, row_item.get('publisher'))
+            excel_sheet.write(start_index + i, 4, _safe_cell(row_item.get('title')))
+            excel_sheet.write(start_index + i, 5, _safe_cell(row_item.get('subtitle')))
+            excel_sheet.write(start_index + i, 6, _safe_cell(row_item.get('url')))
+            excel_sheet.write(start_index + i, 7, _safe_cell(row_item.get('date')))
+            excel_sheet.write(start_index + i, 8, _safe_cell(row_item.get('content')))
+            excel_sheet.write(start_index + i, 9, _safe_cell(row_item.get('publisher')))
 
         book.save(filename)

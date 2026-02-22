@@ -1,54 +1,74 @@
-# # 简单的跑一个Crawler，使用当前配置
-# from scrapy.cmdline import execute
-# execute(['scrapy', 'crawl', 'TaxPolicyCrawler']) # 'TaxPolicyCrawler' #'TaxPolicyExplainCrawler'
+import argparse
 
-
-# # 使用CrawlerProcess，"并行"跑一组Crawler，使用指定配置
-# from scrapy.crawler import CrawlerProcess
-# from TaxPolicyCrawlerScrapy.spiders.chinatax.TaxPolicyCrawler import TaxPolicyCrawler
-# from TaxPolicyCrawlerScrapy.spiders.chinatax.TaxPolicyExplainCrawler import TaxPolicyExplainCrawler
-# from scrapy.utils.project import get_project_settings
-#
-# process = CrawlerProcess(get_project_settings())
-# process.crawl(TaxPolicyCrawler)
-# process.crawl(TaxPolicyExplainCrawler)
-# process.start()
-
-
-# 使用CrawlerRunner，"并行"跑一组Crawler，使用指定配置
-from twisted.internet import reactor
-from scrapy.crawler import CrawlerRunner
-from scrapy.utils.log import configure_logging
-from TaxPolicyCrawlerScrapy.spiders.chinatax.TaxPolicyCrawler import TaxPolicyCrawler
-from TaxPolicyCrawlerScrapy.spiders.chinatax.TaxPolicyExplainCrawler import TaxPolicyExplainCrawler
+from scrapy.crawler import CrawlerProcess
 from scrapy.utils.project import get_project_settings
 
-configure_logging()
-runner = CrawlerRunner(get_project_settings())
-runner.crawl(TaxPolicyCrawler)
-runner.crawl(TaxPolicyExplainCrawler)
-d = runner.join()
-d.addBoth(lambda _: reactor.stop())
-
-# the script will block here until all crawling jobs are finished
-reactor.run()
+from TaxPolicyCrawlerScrapy.spiders.chinatax.TaxPolicyCrawler import TaxPolicyCrawler
+from TaxPolicyCrawlerScrapy.spiders.chinatax.TaxPolicyExplainCrawler import TaxPolicyExplainCrawler
 
 
-# # 使用CrawlerRunner，"串行"跑一组Crawler，使用指定配置
-# from twisted.internet import reactor, defer
-# from scrapy.crawler import CrawlerRunner
-# from TaxPolicyCrawlerScrapy.spiders.chinatax.TaxPolicyCrawler import TaxPolicyCrawler
-# from TaxPolicyCrawlerScrapy.spiders.chinatax.TaxPolicyExplainCrawler import TaxPolicyExplainCrawler
-# from scrapy.utils.log import configure_logging
-#
-# configure_logging()
-# runner = CrawlerRunner()
-#
-# @defer.inlineCallbacks
-# def crawl():
-#     yield runner.crawl(TaxPolicyCrawler)
-#     yield runner.crawl(TaxPolicyExplainCrawler)
-#     reactor.stop()
-#
-# crawl()
-# reactor.run() # the script will block here until the last crawl call is finished
+SPIDER_REGISTRY = {
+    TaxPolicyCrawler.name: TaxPolicyCrawler,
+    TaxPolicyExplainCrawler.name: TaxPolicyExplainCrawler,
+}
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Run tax policy crawlers.')
+    parser.add_argument(
+        '--spiders',
+        default='TaxPolicyCrawler,TaxPolicyExplainCrawler',
+        help='Comma-separated spider names.',
+    )
+    parser.add_argument('--max-pages', type=int, help='Override CHINATAX_MAX_PAGES.')
+    parser.add_argument('--page-size', type=int, help='Override CHINATAX_PAGE_SIZE.')
+    parser.add_argument('--export-excel', choices=['0', '1'], help='Override EXPORT_EXCEL.')
+    parser.add_argument('--use-elasticsearch', choices=['0', '1'], help='Override USE_ELASTICSEARCH.')
+    return parser.parse_args()
+
+
+def build_settings(args):
+    settings = get_project_settings()
+
+    if args.max_pages is not None:
+        settings.set('CHINATAX_MAX_PAGES', args.max_pages, priority='cmdline')
+    if args.page_size is not None:
+        settings.set('CHINATAX_PAGE_SIZE', args.page_size, priority='cmdline')
+    if args.export_excel is not None:
+        settings.set('EXPORT_EXCEL', bool(int(args.export_excel)), priority='cmdline')
+    if args.use_elasticsearch is not None:
+        settings.set('USE_ELASTICSEARCH', bool(int(args.use_elasticsearch)), priority='cmdline')
+
+    item_pipelines = {}
+    if settings.getbool('USE_ELASTICSEARCH'):
+        item_pipelines['TaxPolicyCrawlerScrapy.pipelines.ElasticSearchPipeline.ElasticSearchPipeline'] = 400
+    if settings.getbool('EXPORT_EXCEL'):
+        item_pipelines['TaxPolicyCrawlerScrapy.pipelines.ExcelPipeline.ExcelPipeline'] = 450
+    settings.set('ITEM_PIPELINES', item_pipelines, priority='cmdline')
+    return settings
+
+
+def parse_spiders(raw_value):
+    spiders = []
+    for name in [x.strip() for x in raw_value.split(',') if x.strip()]:
+        if name not in SPIDER_REGISTRY:
+            raise ValueError(
+                'Unknown spider "{}". Available: {}'.format(
+                    name, ', '.join(sorted(SPIDER_REGISTRY.keys()))
+                )
+            )
+        spiders.append(SPIDER_REGISTRY[name])
+    return spiders
+
+
+def main():
+    args = parse_args()
+    spiders = parse_spiders(args.spiders)
+    process = CrawlerProcess(build_settings(args))
+    for spider in spiders:
+        process.crawl(spider)
+    process.start()
+
+
+if __name__ == '__main__':
+    main()

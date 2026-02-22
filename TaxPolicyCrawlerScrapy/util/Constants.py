@@ -13,102 +13,19 @@ es_index_name = 'tax_policy'
 default_doc_type = "doc"
 
 # 目前所有的税收政策，都放在同一个index里
+# 新版 Elasticsearch 移除了 mapping type，直接定义 properties。
 default_es_mapping = {
-    "doc": {            # 由于single-type，这里固定为"doc"，与default_doc_type保持一致
-        "properties": {
-            "doc_type": {
-                "type": "keyword"
-            },
-            "content": {
-                "type": "text",
-                "fields": {
-                    "keyword": {
-                        "type": "keyword",
-                        "ignore_above": 256
-                    }
-                },
-                "analyzer": "ik_max_word",
-                "search_analyzer": "ik_max_word"
-            },
-            "date": {
-                "type": "text",
-                "fields": {
-                    "keyword": {
-                        "type": "keyword",
-                        "ignore_above": 256
-                    }
-                }
-            },
-            "hash_md5": {
-                "type": "keyword"
-                # "type": "string",
-                # "index": "not_analyzed",  # here
-                # "fields": {
-                #     "keyword": {
-                #         "type": "keyword",
-                #         "ignore_above": 256
-                #     }
-                # }
-            },
-            "policyType": {
-                "type": "text",
-                "fields": {
-                    "keyword": {
-                        "type": "keyword",
-                        "ignore_above": 256
-                    }
-                },
-                "analyzer": "ik_max_word",
-                "search_analyzer": "ik_max_word"
-            },
-            "publisher": {
-                "type": "text",
-                "fields": {
-                    "keyword": {
-                        "type": "keyword",
-                        "ignore_above": 256
-                    }
-                },
-                "analyzer": "ik_max_word",
-                "search_analyzer": "ik_max_word"
-            },
-            "source": {
-                "type": "text",
-                "fields": {
-                    "keyword": {
-                        "type": "keyword",
-                        "ignore_above": 256
-                    }
-                },
-                "analyzer": "ik_max_word",
-                "search_analyzer": "ik_max_word"
-            },
-            "timestamp": {
-                "type": "float"
-            },
-            "title": {
-                "type": "text",
-                "fields": {
-                    "keyword": {
-                        "type": "keyword",
-                        "ignore_above": 256
-                    }
-                },
-                "analyzer": "ik_max_word",
-                "search_analyzer": "ik_max_word"
-            },
-            "url": {
-                # "type": "string",
-                # "index": "not_analyzed",  # here
-                # "fields": {
-                #     "keyword": {
-                #         "type": "keyword",
-                #         "ignore_above": 256
-                #     }
-                # }
-                "type": "keyword"
-            }
-        }
+    "properties": {
+        "doc_type": {"type": "keyword"},
+        "content": {"type": "text"},
+        "date": {"type": "text"},
+        "hash_md5": {"type": "keyword"},
+        "policyType": {"type": "text"},
+        "publisher": {"type": "text"},
+        "source": {"type": "text"},
+        "timestamp": {"type": "float"},
+        "title": {"type": "text"},
+        "url": {"type": "keyword"},
     }
 }
 

@@ -11,6 +11,12 @@ TaxPolicyCrawlerScrapy/spiders/__pycache__
 TaxPolicyCrawlerScrapy/util/__pycache__
 __pycache__
 tax_policy.xls
+*.pyc
+*.pyo
+*.pyd
+**/__pycache__/
+.venv/
+venv/
 /temp/captcha
 /build
 /dist
